@@ -1,0 +1,30 @@
+"""
+
+# Connect with Instagram API
+
+# Step 2: Set up selenium with access to Instagram
+
+# Step 3: Navigate from profile to explore page
+# instagram.com/explore
+
+# Step 4: click first post, record info
+find element where class="           QzzMF         Igw0E     IwRSH      eGOV_         _4EzTm                                                                                                            NUiEW  "
+or find the a tag
+
+Posting Account:
+Am I following them?:
+Posting Account Follower Count:
+
+Image URL:
+# of Likes: button class="sqdOP yWX7d     _8A5w5    "
+# of Comments:
+First Comment: h2 class="_6lAjh "
+Posted Date: div class="_7UhW9  PIoXz       MMzan   _0PwGv        uL8Hv         "
+
+# Step 5: Loop first 100 posts in explore, recording each piece of info
+
+# Step 6: Package and send scrapped info to Postgres database
+
+# Step 7: Unpack from postgres database and visualize in Jupyter Notebook
+
+"""
