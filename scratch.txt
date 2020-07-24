@@ -27,4 +27,28 @@ Posted Date: div class="_7UhW9  PIoXz       MMzan   _0PwGv        uL8Hv         
 
 # Step 7: Unpack from postgres database and visualize in Jupyter Notebook
 
+
+{
+  "config": {
+    "csrf_token": "w04SVdzTJoYFqgyMYR6VfG68EklIN9AM",
+    "viewer": {
+      "biography": "",
+      "external_url": null,
+      "full_name": "alex",
+      "has_phone_number": true,
+      "has_profile_pic": true,
+      "has_tabbed_inbox": false,
+      "id": "198077379",
+      "is_joined_recently": false,
+      "is_private": false,
+      "profile_pic_url": "https://instagram.fmem1-1.fna.fbcdn.net/v/t51.2885-19/s150x150/70654499_1294680970704104_3105571597675659264_n.jpg?_nc_ht=instagram.fmem1-1.fna.fbcdn.net\u0026_nc_ohc=aGYwabcpKiYAX_D0FxJ\u0026oh=19f5118fdeed44095d5e843c461d4344\u0026oe=5F42B5A4",
+      "profile_pic_url_hd": "https://instagram.fmem1-1.fna.fbcdn.net/v/t51.2885-19/s320x320/70654499_1294680970704104_3105571597675659264_n.jpg?_nc_ht=instagram.fmem1-1.fna.fbcdn.net\u0026_nc_ohc=aGYwabcpKiYAX_D0FxJ\u0026oh=adcff571f5d6c5f62be889aa743aa9df\u0026oe=5F4254DC",
+      "username": "axndr",
+      "badge_count": "{\"seq_id\": 4009, \"badge_count\": 0, \"badge_count_at_ms\": 1595529436806}"
+    },
+}
+
+
 """
+
+viewable, blocked_by_viewer, restricted_by_viewer, edge_followed_by, followed_by_viewer, edge_follow, follows_viewer, full_name, has_blocked_viewer, has_requested_viewer, id, is_business_account, is_joined_recently, business_category_name, category_enum, is_private, is_verified, edge_mutual_followed_by, requested_by_viewer, username, connected_fb_page,
