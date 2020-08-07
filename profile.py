@@ -64,7 +64,6 @@ class Profile:
         self.business_category_name = profile_data['business_category_name']
         self.category_enum = profile_data['category_enum']
         self.requested_by_viewer = profile_data['requested_by_viewer']
-
         self.blocked_by_viewer = profile_data['blocked_by_viewer']
         self.has_blocked_viewer = profile_data['has_blocked_viewer']
         self.restricted_by_viewer = profile_data['restricted_by_viewer']
