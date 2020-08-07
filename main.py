@@ -2,6 +2,8 @@ import requests
 import json
 from json.decoder import JSONDecodeError
 import logging
+import sqlalchemy
+import psycopg2
 from itertools import count
 from time import sleep
 from datetime import date
@@ -13,12 +15,99 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from profile import Profile
 from post import Post
+from dotenv import load_dotenv
+import os
+
+load_dotenv()
 
 logging.basicConfig(filename='ig_scrape_logs.log', level=logging.DEBUG)
 
 PATH = "C:\\Program Files (x86)\\chromedriver_win32\\chromedriver.exe"
 instagram_url = 'https://www.instagram.com'
 explore_page_url = 'https://www.instagram.com/explore/grid/?is_prefetch=false&omit_cover_media=false&module=explore_popular&use_sectional_payload=true&cluster_id=explore_all%3A0&include_fixed_destinations=true&max_id='
+
+connection_arguments = {
+    'database': os.getenv('PG_DATABASE_NAME'),
+    'host': os.getenv('PG_HOST'),
+    'port': os.getenv('PG_PORT'),
+    'user': os.getenv('PG_USER'),
+    'password': os.getenv('PG_PASSWORD'),
+}
+
+# User_types = [
+#         <class 'str'>: CDR-C9ajLKK,
+#         <class 'str'>: itechexplore,
+#         <class 'datetime.date'>: 2020-08-07,
+#         <class 'datetime.date'>: 2020-07-30,
+#         <class 'bool'>: True,
+#         <class 'int'>: 31274,
+#         <class 'int'>: 415,
+#         <class 'bool'>: False,
+#         <class 'bool'>: False,
+#         <class 'list'>: ['#itechexplore', '#technigadgets', '#techportal', '#technologya', '#techclass', '#newinventions', '#coolinventions', '#technologyrules', '#hightechnology', '#techgadget', '#techlovers', '#hometech', '#gadgetlife', '#engineeringtech', '#technologic', '#technine', '#coolgadgets', '#smarthometechnology', '#techgadgets', '#gadgetfreak', '#futuretech', '#newtechnology', '#tecnology', '#innovation', '#techgadgets'],
+#         <class 'bool'>: True,
+#         <class 'bool'>: False,
+#         <class 'bool'>: False,
+# ]
+
+
+# Posts
+# ['link']: str
+# ['user']: str
+# ['date_seen']: str
+# ['date_posted']: str
+# ['is_video']: str
+# ['likes']: str
+# ['comments']: str
+# ['liked']: str
+# ['is_seen']: str
+# ['tags']: str
+# ['from_explore']: str
+# ['from_liked']: str
+# ['is_ad']: str
+# ['tag_count']: str
+# ['views']: str
+#
+#
+# Users
+# Index: 0 -----------------
+# Data: id, Type: #<class 'str'>#
+# Index: 1 -----------------
+# Data: username, Type: #<class 'str'>#
+# Index: 2 -----------------
+# Data: full_name, Type: #<class 'str'>#
+# Index: 3 -----------------
+# Data: followers, Type: #<class 'str'>#
+# Index: 4 -----------------
+# Data: following, Type: #<class 'str'>#
+# Index: 5 -----------------
+# Data: following_me, Type: #<class 'str'>#
+# Index: 6 -----------------
+# Data: requested, Type: #<class 'str'>#
+# Index: 7 -----------------
+# Data: requested_me, Type: #<class 'str'>#
+# Index: 8 -----------------
+# Data: edge_followers, Type: #<class 'str'>#
+# Index: 9 -----------------
+# Data: verified, Type: #<class 'str'>#
+# Index: 10 -----------------
+# Data: is_business_account, Type: #<class 'str'>#
+# Index: 11 -----------------
+# Data: connected_fb_page, Type: #<class 'str'>#
+# Index: 12 -----------------
+# Data: is_joined_recently, Type: #<class 'str'>#
+# Index: 13 -----------------
+# Data: business_category_name, Type: #<class 'str'>#
+# Index: 14 -----------------
+# Data: category_enum, Type: #<class 'str'>#
+# Index: 15 -----------------
+# Data: blocked_by_viewer, Type: #<class 'str'>#
+# Index: 16 -----------------
+# Data: has_blocked_viewer, Type: #<class 'str'>#
+# Index: 17 -----------------
+# Data: restricted_by_viewer, Type: #<class 'str'>#
+# Index: 18 -----------------
+# Data: is_private, Type: #<class 'str'>#
 
 
 def check_page_load():
@@ -63,12 +152,39 @@ def login():
         raise TimeoutError('Timed out loading login page')
 
     username = ig_driver.find_element_by_name('username')
-    username.send_keys('axndr')
+    username.send_keys(os.getenv('INSTAGRAM_USERNAME'))
     password = ig_driver.find_element_by_name('password')
-    password.send_keys('dEq5A9qOrp0I')
+    password.send_keys(os.getenv('INSTAGRAM_PASSWORD'))
     password.send_keys(Keys.RETURN)
     check_page_load()
 
+
+def db_login():
+    try:
+        connection = psycopg2.connect(
+            # engine = os.getenv('PG_ENGINE'),
+            database = os.getenv('PG_DATABASE_NAME'),
+            host = os.getenv('PG_HOST'),
+            port = os.getenv('PG_PORT'),
+            user = os.getenv('PG_USER'),
+            password = os.getenv('PG_PASSWORD'),
+        )
+        connection.autocommit = False
+        cursor = connection.cursor()
+        amount = 2500
+    except psycopg2.DatabaseError:
+        raise psycopg2.DatabaseError(f'Could not connect to {os.getenv("PG_DATABASE_NAME")}')
+
+    cursor.execute('ALTER TABLE posts ADD COLUMN test VARCHAR(20);')
+    yield
+
+    cursor.execute('ALTER TABLE posts DROP COLUMN test')
+
+    # closing database connection.
+    if connection:
+        cursor.close()
+        connection.close()
+        print("PostgreSQL connection is closed")
 
 def get_image_urls(requested=100) -> list:
     """
@@ -116,6 +232,7 @@ def get_image_data(urls) -> list:
         }
     """
     post_data = []
+    rv = {}
 
     for index, url in enumerate(urls):
         logging.debug(f'Getting data for {index}: {url}')
@@ -140,24 +257,24 @@ def get_image_data(urls) -> list:
                 urls.append(get_image_urls(1)[0])
                 continue
 
-        rv = {
-            'link': json_data['graphql']['shortcode_media']['shortcode'],
-            'user': json_data['graphql']['shortcode_media']['owner']['username'], 'date_seen': date.today(),
-            'date_posted': date.fromtimestamp(json_data['graphql']['shortcode_media']['taken_at_timestamp']),
-            'is_video': json_data['graphql']['shortcode_media']['is_video'],
-            'likes': json_data['graphql']['shortcode_media']['edge_media_preview_like']['count'],
-            'comments': json_data['graphql']['shortcode_media']['edge_media_to_parent_comment']['count'],
-            'liked': json_data['graphql']['shortcode_media']['viewer_has_liked'], 'is_seen': is_seen(),
-            'tags': get_tags(soup),
-            'from_explore': True,
-            'from_liked': False,
-            'is_ad': json_data['graphql']['shortcode_media']['is_ad']
-        }
-
+        # TODO: This is broken, should be an array of dicts being returned
+        rv['link'] = str(json_data['graphql']['shortcode_media']['shortcode']),
+        rv['user'] = str(json_data['graphql']['shortcode_media']['owner']['username']),
+        rv['date_seen'] = date.today(),
+        rv['date_posted'] = date.fromtimestamp(json_data['graphql']['shortcode_media']['taken_at_timestamp']),
+        rv['is_video'] = bool(json_data['graphql']['shortcode_media']['is_video']),
+        rv['likes'] = int(json_data['graphql']['shortcode_media']['edge_media_preview_like']['count']),
+        rv['comments'] = int(json_data['graphql']['shortcode_media']['edge_media_to_parent_comment']['count']),
+        rv['liked'] = bool(json_data['graphql']['shortcode_media']['viewer_has_liked']),
+        rv['is_seen'] = is_seen(),
+        rv['tags'] = get_tags(soup),
+        rv['from_explore'] = bool(True),
+        rv['from_liked'] = bool(False),
+        rv['is_ad'] = bool(json_data['graphql']['shortcode_media']['is_ad'])
         rv['tag_count'] = len(rv['tags']),
 
         try:
-            rv['views'] = json_data['graphql']['shortcode_media']['video_view_count']
+            rv['views'] = int(json_data['graphql']['shortcode_media']['video_view_count'])
         except KeyError:
             rv['views'] = None
 
@@ -196,28 +313,33 @@ def get_user_data(users: set) -> list:
         all_scripts = soup.find_all('script', {'type': 'text/javascript'})
         script = all_scripts[3].decode_contents()
         json_string = (script[script.find('{'):]).split(';')[0]
-        d = json.loads(json_string)
+        try:
+            d = json.loads(json_string)
+        except JSONDecodeError:
+            # TODO: Handle JSONDecodeError for an 'unterminated string' when getting User data
+            raise JSONDecodeError('Unterminated string')
+
         profile_data = d['entry_data']['ProfilePage'][0]['graphql']['user']
 
-        data['id'] = profile_data['id']
-        data['username'] = profile_data['username']
-        data['full_name'] = profile_data['full_name']
-        data['followers'] = profile_data['edge_followed_by']['count']
-        data['following'] = profile_data['followed_by_viewer']
-        data['following_me'] = profile_data['follows_viewer']
-        data['requested'] = profile_data['requested_by_viewer']
-        data['requested_me'] = profile_data['has_requested_viewer']
-        data['edge_followers'] = profile_data['edge_mutual_followed_by']['count']
-        data['verified'] = profile_data['is_verified']
-        data['is_business_account'] = profile_data['is_business_account']
-        data['connected_fb_page'] = profile_data['connected_fb_page']
-        data['is_joined_recently'] = profile_data['is_joined_recently']
-        data['business_category_name'] = profile_data['business_category_name']
-        data['category_enum'] = profile_data['category_enum']
-        data['blocked_by_viewer'] = profile_data['blocked_by_viewer']
-        data['has_blocked_viewer'] = profile_data['has_blocked_viewer']
-        data['restricted_by_viewer'] = profile_data['restricted_by_viewer']
-        data['is_private'] = profile_data['is_private']
+        data['id'] = int(profile_data['id'])
+        data['username'] = str(profile_data['username'])
+        data['full_name'] = str(profile_data['full_name'])
+        data['followers'] = int(profile_data['edge_followed_by']['count'])
+        data['following'] = bool(profile_data['followed_by_viewer'])
+        data['following_me'] = bool(profile_data['follows_viewer'])
+        data['requested'] = bool(profile_data['requested_by_viewer'])
+        data['requested_me'] = bool(profile_data['has_requested_viewer'])
+        data['edge_followers'] = int(profile_data['edge_mutual_followed_by']['count'])
+        data['verified'] = bool(profile_data['is_verified'])
+        data['is_business_account'] = bool(profile_data['is_business_account'])
+        data['connected_fb_page'] = bool(profile_data['connected_fb_page'])
+        data['is_joined_recently'] = bool(profile_data['is_joined_recently'])
+        data['business_category_name'] = str(profile_data['business_category_name'])
+        data['category_enum'] = str(profile_data['category_enum'])
+        data['blocked_by_viewer'] = bool(profile_data['blocked_by_viewer'])
+        data['has_blocked_viewer'] = bool(profile_data['has_blocked_viewer'])
+        data['restricted_by_viewer'] = bool(profile_data['restricted_by_viewer'])
+        data['is_private'] = bool(profile_data['is_private'])
         rv.append(data)
     return rv
 
@@ -310,7 +432,18 @@ def get_instagram_profile(username: str) -> Profile:
     return rv
 
 
+def upload_data_to_db():
+    pass
+
+
 if __name__ == '__main__':
     with webdriver.Chrome(PATH) as ig_driver:
         (post_data, user_data) = run_scrape(2)
+
+    print('wait')
+
+    print('post')
+
+
+    with psycopg2.connect(**connection_arguments) as conn:
         pass
