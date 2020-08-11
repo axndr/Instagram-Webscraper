@@ -6,7 +6,7 @@ import sqlalchemy
 import psycopg2
 from itertools import count
 from time import sleep
-from datetime import date
+from datetime import date, datetime, timezone
 from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.common.by import By
@@ -20,7 +20,9 @@ import os
 
 load_dotenv()
 
-logging.basicConfig(filename='ig_scrape_logs.log', level=logging.DEBUG)
+logging.basicConfig(
+    filename=f'C:\\Users\\alexc\\OneDrive\Documents\\projects\\insta_scraper\\logs\\ig_scrape{datetime.now().strftime("%Y%m%d-%H%M%S")}.log',
+    level=logging.DEBUG)
 
 PATH = "C:\\Program Files (x86)\\chromedriver_win32\\chromedriver.exe"
 instagram_url = 'https://www.instagram.com'
@@ -34,80 +36,45 @@ connection_arguments = {
     'password': os.getenv('PG_PASSWORD'),
 }
 
-# User_types = [
-#         <class 'str'>: CDR-C9ajLKK,
-#         <class 'str'>: itechexplore,
-#         <class 'datetime.date'>: 2020-08-07,
-#         <class 'datetime.date'>: 2020-07-30,
-#         <class 'bool'>: True,
-#         <class 'int'>: 31274,
-#         <class 'int'>: 415,
-#         <class 'bool'>: False,
-#         <class 'bool'>: False,
-#         <class 'list'>: ['#itechexplore', '#technigadgets', '#techportal', '#technologya', '#techclass', '#newinventions', '#coolinventions', '#technologyrules', '#hightechnology', '#techgadget', '#techlovers', '#hometech', '#gadgetlife', '#engineeringtech', '#technologic', '#technine', '#coolgadgets', '#smarthometechnology', '#techgadgets', '#gadgetfreak', '#futuretech', '#newtechnology', '#tecnology', '#innovation', '#techgadgets'],
-#         <class 'bool'>: True,
-#         <class 'bool'>: False,
-#         <class 'bool'>: False,
-# ]
+post_types = {
+    'link': 'str',
+    'user': 'str',
+    'date_seen': 'datetime.date',
+    'date_posted': 'datetime.date',
+    'likes': 'int',
+    'comments': 'int',
+    'liked': 'bool',
+    'is_video': 'bool',
+    'is_seen': 'bool',
+    'tag_count': 'int',
+    'from_explore': 'bool',
+    'from_liked': 'bool',
+    'is_ad': 'bool',
+    'views': 'int',
+    'tags': 'list',
+}
 
-
-# Posts
-# ['link']: str
-# ['user']: str
-# ['date_seen']: str
-# ['date_posted']: str
-# ['is_video']: str
-# ['likes']: str
-# ['comments']: str
-# ['liked']: str
-# ['is_seen']: str
-# ['tags']: str
-# ['from_explore']: str
-# ['from_liked']: str
-# ['is_ad']: str
-# ['tag_count']: str
-# ['views']: str
-#
-#
-# Users
-# Index: 0 -----------------
-# Data: id, Type: #<class 'str'>#
-# Index: 1 -----------------
-# Data: username, Type: #<class 'str'>#
-# Index: 2 -----------------
-# Data: full_name, Type: #<class 'str'>#
-# Index: 3 -----------------
-# Data: followers, Type: #<class 'str'>#
-# Index: 4 -----------------
-# Data: following, Type: #<class 'str'>#
-# Index: 5 -----------------
-# Data: following_me, Type: #<class 'str'>#
-# Index: 6 -----------------
-# Data: requested, Type: #<class 'str'>#
-# Index: 7 -----------------
-# Data: requested_me, Type: #<class 'str'>#
-# Index: 8 -----------------
-# Data: edge_followers, Type: #<class 'str'>#
-# Index: 9 -----------------
-# Data: verified, Type: #<class 'str'>#
-# Index: 10 -----------------
-# Data: is_business_account, Type: #<class 'str'>#
-# Index: 11 -----------------
-# Data: connected_fb_page, Type: #<class 'str'>#
-# Index: 12 -----------------
-# Data: is_joined_recently, Type: #<class 'str'>#
-# Index: 13 -----------------
-# Data: business_category_name, Type: #<class 'str'>#
-# Index: 14 -----------------
-# Data: category_enum, Type: #<class 'str'>#
-# Index: 15 -----------------
-# Data: blocked_by_viewer, Type: #<class 'str'>#
-# Index: 16 -----------------
-# Data: has_blocked_viewer, Type: #<class 'str'>#
-# Index: 17 -----------------
-# Data: restricted_by_viewer, Type: #<class 'str'>#
-# Index: 18 -----------------
-# Data: is_private, Type: #<class 'str'>#
+user_types = {
+    'username': 'str',
+    'followers': 'int',
+    'following': 'bool',
+    'following_me': 'bool',
+    'requested': 'bool',
+    'requested_me': 'bool',
+    'edge_followers': 'int',
+    'verified': 'bool',
+    'is_business_account': 'bool',
+    'id': 'int',
+    'full_name': 'str',
+    'connected_fb_page': 'bool',
+    'is_joined_recently': 'bool',
+    'business_category_name': 'str',
+    'category_enum': 'str',
+    'blocked_by_viewer': 'bool',
+    'has_blocked_viewer': 'bool',
+    'restricted_by_viewer': 'bool',
+    'is_private': 'bool',
+}
 
 
 def check_page_load():
@@ -124,12 +91,13 @@ def check_page_load():
 def run_scrape(number_of_posts) -> tuple:
     login()
 
-    urls = get_image_urls(number_of_posts)
-    post_data = get_image_data(urls)
+    print('Getting Post Data')
+    post_urls = get_image_urls(number_of_posts)
+    post_data = get_image_data(post_urls)
 
-    # set used because it gets rid of duplicates, commonly used in this script
-    users = set((post['user'] for post in post_data))
-    user_data = get_user_data(users)
+    print('Getting User Data')
+    user_urls = get_user_urls(post['username'] for post in post_data)
+    user_data = get_user_data(user_urls)
 
     # TODO: Implement hashtag scrape in run_scrape()
     # tags = set((tag for tag in post['tags']) for post in post_data)
@@ -163,11 +131,11 @@ def db_login():
     try:
         connection = psycopg2.connect(
             # engine = os.getenv('PG_ENGINE'),
-            database = os.getenv('PG_DATABASE_NAME'),
-            host = os.getenv('PG_HOST'),
-            port = os.getenv('PG_PORT'),
-            user = os.getenv('PG_USER'),
-            password = os.getenv('PG_PASSWORD'),
+            database=os.getenv('PG_DATABASE_NAME'),
+            host=os.getenv('PG_HOST'),
+            port=os.getenv('PG_PORT'),
+            user=os.getenv('PG_USER'),
+            password=os.getenv('PG_PASSWORD'),
         )
         connection.autocommit = False
         cursor = connection.cursor()
@@ -185,6 +153,7 @@ def db_login():
         cursor.close()
         connection.close()
         print("PostgreSQL connection is closed")
+
 
 def get_image_urls(requested=100) -> list:
     """
@@ -217,70 +186,90 @@ def get_image_urls(requested=100) -> list:
                     break
             else:
                 continue
+
+    # ! Testing Data
+    rv.insert(0, 'https://www.instagram.com/p/CDg9poShSNF')
+    rv.insert(0, 'https://www.instagram.com/p/CDZSOsbhpR0')
+    rv.insert(0, 'https://www.instagram.com/p/CDtoaIgBNrI')
+    return rv
+
+
+def get_user_urls(partial_user_urls: list) -> list:
+    rv = []
+    for element in partial_user_urls:
+        rv.append(f'https://www.instagram.com/{element}')
+    # ! Testing Data
+    rv.insert(0, 'https://www.instagram.com/3d_printing_virals')
     return rv
 
 
 def get_image_data(urls) -> list:
-    """
-    TODO: Does a lot of work. Should this be broken up?
-
-
-    :return:
-        data = {
-                post: {a: test.html, b: 2, c: 3, d: 4, e: 5, f: 6},
-                post1: {a: test.html, b: 2, c...}
-        }
-    """
-    post_data = []
-    rv = {}
+    posts = []
+    post = {}
 
     for index, url in enumerate(urls):
         logging.debug(f'Getting data for {index}: {url}')
+        # response = requests.get(url)
+        # if response.ok:
+        #     soup = BeautifulSoup(response.text, 'html.parser')
+        # else:
+        #     raise ConnectionError(f'Unable to connect to Instagram post')
+
+        # ! Reimplementing Selenium for checking posts data
         ig_driver.get(url)
         check_page_load()
         soup = BeautifulSoup(ig_driver.page_source, 'html.parser')
 
-        try:
-            script = soup.find_all('script')[19].contents[0]
-            script_load = script[script.find('{'):-2]
-            json_data = json.loads(script_load)
-        except JSONDecodeError:
-            # edge case for when soup the 19th script tag doesn't contain valid JSON
-            try:
-                script = soup.find_all('script')[18].contents[0]
-                script_load = script[script.find('{'):-2]
-                json_data = json.loads(script_load)
-            except JSONDecodeError:
-                # if there isn't valid JSON in index 18, grab a new URL
-                logging.error(f'Replacing {url}, threw JSONDecodeError.')
-                urls.pop(index)
-                urls.append(get_image_urls(1)[0])
-                continue
+        json_data = get_post_script(soup)
 
         # TODO: This is broken, should be an array of dicts being returned
-        rv['link'] = str(json_data['graphql']['shortcode_media']['shortcode']),
-        rv['user'] = str(json_data['graphql']['shortcode_media']['owner']['username']),
-        rv['date_seen'] = date.today(),
-        rv['date_posted'] = date.fromtimestamp(json_data['graphql']['shortcode_media']['taken_at_timestamp']),
-        rv['is_video'] = bool(json_data['graphql']['shortcode_media']['is_video']),
-        rv['likes'] = int(json_data['graphql']['shortcode_media']['edge_media_preview_like']['count']),
-        rv['comments'] = int(json_data['graphql']['shortcode_media']['edge_media_to_parent_comment']['count']),
-        rv['liked'] = bool(json_data['graphql']['shortcode_media']['viewer_has_liked']),
-        rv['is_seen'] = is_seen(),
-        rv['tags'] = get_tags(soup),
-        rv['from_explore'] = bool(True),
-        rv['from_liked'] = bool(False),
-        rv['is_ad'] = bool(json_data['graphql']['shortcode_media']['is_ad'])
-        rv['tag_count'] = len(rv['tags']),
-
+        post['link'] = str(json_data['graphql']['shortcode_media']['shortcode'])
+        post['username'] = str(json_data['graphql']['shortcode_media']['owner']['username'])
+        post['date_seen'] = datetime.now(timezone.utc)
+        post['date_posted'] = datetime.fromtimestamp(json_data['graphql']['shortcode_media']['taken_at_timestamp'], tz=timezone.utc)
+        post['is_video'] = bool(json_data['graphql']['shortcode_media']['is_video'])
+        post['likes'] = int(json_data['graphql']['shortcode_media']['edge_media_preview_like']['count'])
+        post['comments'] = int(json_data['graphql']['shortcode_media']['edge_media_to_parent_comment']['count'])
+        post['liked'] = bool(json_data['graphql']['shortcode_media']['viewer_has_liked'])
+        post['is_seen'] = is_seen()
+        post['tags'] = get_tags(soup).copy()
+        post['from_explore'] = bool(True)
+        post['from_liked'] = bool(False)
+        post['is_ad'] = bool(json_data['graphql']['shortcode_media']['is_ad'])
+        post['tag_count'] = len(post['tags'])
         try:
-            rv['views'] = int(json_data['graphql']['shortcode_media']['video_view_count'])
+            post['views'] = int(json_data['graphql']['shortcode_media']['video_view_count'])
         except KeyError:
-            rv['views'] = None
+            post['views'] = 0
+        posts.append(post.copy())
+    return posts
 
-        post_data.append(rv)
 
-    return post_data
+def get_post_script(soup):
+    """
+    # TODO: Implement get_user_script()
+
+    :param: index = 19 is due to 19 being the most common location for the script we're looking for
+    :return:
+    """
+    rv = ""
+    scripts = soup.find_all('script')
+
+    # Script we're looking for is usually found around 18/19th index of 20ish
+    for script in reversed(scripts):
+        try:
+            if script.contents[0][:29] == 'window.__additionalDataLoaded':
+                rv = script.contents[0]
+                break
+        except IndexError:
+            continue
+
+    try:
+        script_load = rv[rv.find('{'):].rsplit(')', maxsplit=1)[0]
+        json_data = json.loads(script_load)
+        return json_data
+    except JSONDecodeError:
+        raise JSONDecodeError
 
 
 def is_seen() -> bool:
@@ -288,7 +277,8 @@ def is_seen() -> bool:
     return False
 
 
-def get_tags(soup: BeautifulSoup, rv=[]) -> list:
+def get_tags(soup: BeautifulSoup) -> list:
+    rv = []
     links = soup.find_all('a')
     for link in links:
         try:
@@ -299,151 +289,118 @@ def get_tags(soup: BeautifulSoup, rv=[]) -> list:
     return rv
 
 
-def get_user_data(users: set) -> list:
-    rv = []
-    data = {}
+def get_user_data(urls) -> list:
+    users = []
+    user = {}
 
-    for user in users:
-        response = requests.get(f'https://www.instagram.com/{user}')
-        if response.ok:
-            soup = BeautifulSoup(response.text, 'html.parser')
-        else:
-            raise ConnectionError(f'Unable to connect to Instagram profile page')
+    for url in urls:
+        # response = requests.get(f'https://www.instagram.com/{url}')
+        # if response.ok:
+        #     soup = BeautifulSoup(response.text, 'html.parser')
+        # else:
+        #     raise ConnectionError(f'Unable to connect to Instagram profile page')
 
-        all_scripts = soup.find_all('script', {'type': 'text/javascript'})
-        script = all_scripts[3].decode_contents()
-        json_string = (script[script.find('{'):]).split(';')[0]
-        try:
-            d = json.loads(json_string)
-        except JSONDecodeError:
-            # TODO: Handle JSONDecodeError for an 'unterminated string' when getting User data
-            raise JSONDecodeError('Unterminated string')
-
-        profile_data = d['entry_data']['ProfilePage'][0]['graphql']['user']
-
-        data['id'] = int(profile_data['id'])
-        data['username'] = str(profile_data['username'])
-        data['full_name'] = str(profile_data['full_name'])
-        data['followers'] = int(profile_data['edge_followed_by']['count'])
-        data['following'] = bool(profile_data['followed_by_viewer'])
-        data['following_me'] = bool(profile_data['follows_viewer'])
-        data['requested'] = bool(profile_data['requested_by_viewer'])
-        data['requested_me'] = bool(profile_data['has_requested_viewer'])
-        data['edge_followers'] = int(profile_data['edge_mutual_followed_by']['count'])
-        data['verified'] = bool(profile_data['is_verified'])
-        data['is_business_account'] = bool(profile_data['is_business_account'])
-        data['connected_fb_page'] = bool(profile_data['connected_fb_page'])
-        data['is_joined_recently'] = bool(profile_data['is_joined_recently'])
-        data['business_category_name'] = str(profile_data['business_category_name'])
-        data['category_enum'] = str(profile_data['category_enum'])
-        data['blocked_by_viewer'] = bool(profile_data['blocked_by_viewer'])
-        data['has_blocked_viewer'] = bool(profile_data['has_blocked_viewer'])
-        data['restricted_by_viewer'] = bool(profile_data['restricted_by_viewer'])
-        data['is_private'] = bool(profile_data['is_private'])
-        rv.append(data)
-    return rv
-
-
-# ! Depreciated, integrated into get_post_data()
-def encode_json_post_data(urls) -> list:
-    for index, url in enumerate(urls):
-        logging.debug(f'Getting data for {index}: {url}')
+        # ! Reimplementing Selenium for checking posts data
         ig_driver.get(url)
         check_page_load()
-        post_soup = BeautifulSoup(ig_driver.page_source, 'html.parser')
+        soup = BeautifulSoup(ig_driver.page_source, 'html.parser')
 
+        print(url)
+        json_data = get_user_script(soup)
         try:
-            post_data.append(get_image_data(post_soup))
-            logging.debug(f'Post Data: {post_data[-1]}')
-        except JSONDecodeError:
-            logging.error(f'Replacing {url}, threw JSONDecodeError.')
-            urls.pop(index)
-            urls.append(get_image_urls(1)[0])
+            profile_data = json_data['entry_data']['ProfilePage'][0]['graphql']['user']
+        except KeyError:
+            raise KeyError
 
-    return post_data
+        # try:
+        #     # TODO: Set profile_data to this permanently if checking against additionalData only returns this path
+        #     print('hit second try in user_data')
+        #     profile_data = json_data['graphql']['user']
+        # except KeyError:
+        #     raise JSONDecodeError
 
-
-# ! Depreciated temporarily
-# def get_tag_data(tags):
-# TODO: Does this dataset need tags as a separate table? Can it not get gotten via joins on Posts?
-
-#     rv = []
-#     data = {}
-#
-#     for tag in tags:
-#         response = requests.get(f'https://www.instagram.com/{tag}')
-#         if response.ok:
-#             soup = BeautifulSoup(response.text, 'html.parser')
-#         else:
-#             raise ConnectionError(f'Unable to connect to Instagram profile page')
-#
-#         all_scripts = soup.find_all('script', {'type': 'text/javascript'})
-#         script = all_scripts[3].decode_contents()
-#         json_string = (script[script.find('{'):]).split(';')[0]
-#         d = json.loads(json_string)
-#         profile_data = d['entry_data']['ProfilePage'][0]['graphql']['user']
-#
-#         data['id'] = profile_data['id']
-#         data['username'] = profile_data['username']
-#         data['full_name'] = profile_data['full_name']
-#         data['followers'] = profile_data['edge_followed_by']['count']
-#         data['following'] = profile_data['followed_by_viewer']
-#         data['following_me'] = profile_data['follows_viewer']
-#         data['requested'] = profile_data['requested_by_viewer']
-#         data['requested_me'] = profile_data['has_requested_viewer']
-#         data['edge_followers'] = profile_data['edge_mutual_followed_by']['count']
-#         data['verified'] = profile_data['is_verified']
-#         data['is_business_account'] = profile_data['is_business_account']
-#         data['connected_fb_page'] = profile_data['connected_fb_page']
-#         data['is_joined_recently'] = profile_data['is_joined_recently']
-#         data['business_category_name'] = profile_data['business_category_name']
-#         data['category_enum'] = profile_data['category_enum']
-#         data['blocked_by_viewer'] = profile_data['blocked_by_viewer']
-#         data['has_blocked_viewer'] = profile_data['has_blocked_viewer']
-#         data['restricted_by_viewer'] = profile_data['restricted_by_viewer']
-#         data['is_private'] = profile_data['is_private']
-#         rv.append(data)
-#     return rv
-
-# ! Depreciated
-def get_soup(url) -> BeautifulSoup:
-    rv = requests.get(url)
-    if rv.ok:
-        soup = BeautifulSoup(rv.text, 'html.parser')
-    else:
-        raise ConnectionError(f'Unable to connect to {url}')
-    return soup
+        user['id'] = int(profile_data['id'])
+        user['username'] = str(profile_data['username'])
+        user['full_name'] = str(profile_data['full_name'])
+        user['followers'] = int(profile_data['edge_followed_by']['count'])
+        user['following'] = bool(profile_data['followed_by_viewer'])
+        user['following_me'] = bool(profile_data['follows_viewer'])  # ! Check on edge user script case
+        user['requested'] = bool(profile_data['requested_by_viewer'])
+        user['requested_me'] = bool(profile_data['has_requested_viewer'])  # ! Check on edge user script case
+        user['edge_followers'] = int(profile_data['edge_mutual_followed_by']['count'])
+        user['verified'] = bool(profile_data['is_verified'])
+        user['is_business_account'] = bool(profile_data['is_business_account'])  # ! Check on edge user script case
+        user['connected_fb_page'] = bool(profile_data['connected_fb_page'])  # ! Check on edge user script case
+        user['is_joined_recently'] = bool(profile_data['is_joined_recently'])  # ! Check on edge user script case
+        user['business_category_name'] = str(profile_data['business_category_name'])  # ! Check on edge user script case
+        user['category_enum'] = str(profile_data['category_enum'])  # ! Check on edge user script case
+        user['blocked_by_viewer'] = bool(profile_data['blocked_by_viewer'])
+        user['has_blocked_viewer'] = bool(profile_data['has_blocked_viewer'])
+        user['restricted_by_viewer'] = bool(profile_data['restricted_by_viewer'])
+        user['is_private'] = bool(profile_data['is_private'])
+        users.append(user.copy())
+    return users
 
 
-# ! Depreciated, integrated into get_user_data()
-def get_instagram_profile(username: str) -> Profile:
+def get_user_script(soup):
     """
-    :param username:
+
+    :param soup:
     :return:
     """
-    soup = get_soup(f'{instagram_url}/{username}')
+    rv = ""
+    scripts = soup.find_all('script', {'type': 'text/javascript'})
 
-    all_scripts = soup.find_all('script', {'type': 'text/javascript'})
-    script = all_scripts[3].decode_contents()
-    json_string = (script[script.find('{'):]).split(';')[0]
-    d = json.loads(json_string)
-    profile_data = d['entry_data']['ProfilePage'][0]['graphql']['user'].copy()
-    rv = Profile(**profile_data)
+    for script in scripts:
+        try:
+            if script.contents[0][:31] == 'window._sharedData = {"config":':
+                rv = script.contents[0]
+                break
+        except IndexError:
+            continue
+
+    try:
+        script_load = (rv[rv.find('{'):]).rsplit(';', maxsplit=1)[0]
+        if script_load[-1:] == ')':
+            script_load = script_load[:-1]
+        json_data = json.loads(script_load)
+        return json_data
+    except JSONDecodeError:
+        raise JSONDecodeError
+
+
+def upload_data(post_data, user_data):
+    with psycopg2.connect(**connection_arguments) as conn:
+        try:
+            cur = conn.cursor()
+            for user in user_data:
+                upload_user_data(cur, **user)
+            for post in post_data:
+                upload_post_data(cur, **post)
+        except (Exception, psycopg2.DatabaseError) as error:
+            print(error)
+
+
+def upload_post_data(cur, link, username, date_seen, date_posted, likes, comments, liked, is_video, is_seen, tag_count, from_explore, from_liked, is_ad, views, tags):
+    print(f'Uploading Post for {link}')
+    tags = build_tags(tags)
+    # TODO: Implement date_seen and date_posted
+    cur.execute(f"""INSERT INTO posts (link, username, likes, comments, liked, is_video, is_seen, tag_count, from_explore, from_liked, is_ad, views, tags) VALUES ('{link}', '{username}', {likes}, {comments}, {liked}, {is_video}, {is_seen}, {tag_count}, {from_explore}, {from_liked}, {is_ad}, {views}, '{tags}');""")
+
+
+def upload_user_data(cur, username, followers, following, following_me, requested, requested_me, edge_followers, verified, is_business_account, id, full_name, connected_fb_page, is_joined_recently, business_category_name, category_enum, blocked_by_viewer, has_blocked_viewer, restricted_by_viewer, is_private):
+    print(f'Uploading User for {username}')
+    cur.execute(f"""INSERT INTO users VALUES ('{username}', {followers}, {following}, {following_me}, {requested}, {requested_me}, {edge_followers}, {verified}, {is_business_account}, {id}, '{full_name}', {connected_fb_page}, {is_joined_recently}, '{business_category_name}', '{category_enum}', {blocked_by_viewer}, {has_blocked_viewer}, {restricted_by_viewer}, {is_private});""")
+
+
+def build_tags(tags) -> str:
+    rv = json.dumps(tags)
+    rv = (rv.replace('[', '{')).replace(']', '}')
     return rv
-
-
-def upload_data_to_db():
-    pass
 
 
 if __name__ == '__main__':
     with webdriver.Chrome(PATH) as ig_driver:
-        (post_data, user_data) = run_scrape(2)
+        (post_data, user_data) = run_scrape(1)
 
-    print('wait')
-
-    print('post')
-
-
-    with psycopg2.connect(**connection_arguments) as conn:
-        pass
+    upload_data(post_data, user_data)
