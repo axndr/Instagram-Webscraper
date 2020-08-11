@@ -9,8 +9,10 @@ from time import sleep
 from datetime import date, datetime, timezone
 from bs4 import BeautifulSoup
 from selenium import webdriver
+from selenium.common.exceptions import TimeoutException
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from profile import Profile
@@ -20,11 +22,17 @@ import os
 
 load_dotenv()
 
+
+logger = logging.getLogger(__name__)
 logging.basicConfig(
     filename=f'C:\\Users\\alexc\\OneDrive\Documents\\projects\\insta_scraper\\logs\\ig_scrape{datetime.now().strftime("%Y%m%d-%H%M%S")}.log',
-    level=logging.DEBUG)
+    level=logging.INFO)
 
 PATH = "C:\\Program Files (x86)\\chromedriver_win32\\chromedriver.exe"
+
+chrome_options = Options()
+# chrome_options.add_argument("--headless")
+
 instagram_url = 'https://www.instagram.com'
 explore_page_url = 'https://www.instagram.com/explore/grid/?is_prefetch=false&omit_cover_media=false&module=explore_popular&use_sectional_payload=true&cluster_id=explore_all%3A0&include_fixed_destinations=true&max_id='
 
@@ -77,43 +85,33 @@ user_types = {
 }
 
 
-def check_page_load():
-    # TODO: turn check_page_load into() into an actual check
-    sleep(5)
-
-    # try:
-    #     wait = WebDriverWait(ig_driver, 5)
-    #     wait.until(EC.visibility_of_element_located((By.)))
-    # except TimeoutError:
-    #     raise TimeoutError('Timed out loading login page')
-
-
 def run_scrape(number_of_posts) -> tuple:
-    login()
+    with webdriver.Chrome(PATH, options=chrome_options) as ig_driver:
+        login(ig_driver)
 
-    print('Getting Post Data')
-    post_urls = get_image_urls(number_of_posts)
-    post_data = get_image_data(post_urls)
+        logger.info('Getting Post Data')
+        post_urls = get_image_urls(ig_driver, number_of_posts)
+        post_data = get_image_data(ig_driver, post_urls)
 
-    print('Getting User Data')
-    user_urls = get_user_urls(post['username'] for post in post_data)
-    user_data = get_user_data(user_urls)
+        logger.info('Getting User Data')
+        user_urls = get_user_urls(ig_driver, (post['username'] for post in post_data))
+        user_data = get_user_data(ig_driver, user_urls)
 
-    # TODO: Implement hashtag scrape in run_scrape()
-    # tags = set((tag for tag in post['tags']) for post in post_data)
-    # tag_data = get_tag_data(tags)
+        # TODO: Implement hashtag scrape in run_scrape()
+        # tags = set((tag for tag in post['tags']) for post in post_data)
+        # tag_data = get_tag_data(tags)
 
-    return post_data, user_data
+        return post_data, user_data
 
 
-def login():
+def login(ig_driver):
     """
     # TODO: turn login() function into context manager
 
     :return:
     """
+    wait = WebDriverWait(ig_driver, 5)
     try:
-        wait = WebDriverWait(ig_driver, 5)
         ig_driver.get('https://www.instagram.com')
         wait.until(EC.visibility_of_element_located((By.NAME, 'username')))
     except TimeoutError:
@@ -123,8 +121,12 @@ def login():
     username.send_keys(os.getenv('INSTAGRAM_USERNAME'))
     password = ig_driver.find_element_by_name('password')
     password.send_keys(os.getenv('INSTAGRAM_PASSWORD'))
-    password.send_keys(Keys.RETURN)
-    check_page_load()
+    # check_page_load()
+    try:
+        password.send_keys(Keys.RETURN)
+        wait.until(EC.visibility_of_element_located((By.XPATH, '//*[@id="react-root"]/section/main/div/div/div/section/div/button')))
+    except TimeoutError:
+        raise TimeoutError('Timed out loading login page')
 
 
 def db_login():
@@ -155,22 +157,22 @@ def db_login():
         print("PostgreSQL connection is closed")
 
 
-def get_image_urls(requested=100) -> list:
+def get_image_urls(ig_driver, requested=100) -> list:
     """
 
     :param requested:
     :return: List of urls to scrape
     """
     rv = []
-    wait = WebDriverWait(ig_driver, 5)
     while len(rv) < requested:
         try:
+            wait = WebDriverWait(ig_driver, 5)
             ig_driver.get('https://www.instagram.com/explore')
-            wait.until(EC.visibility_of_all_elements_located((By.TAG_NAME, 'a')))
+            wait.until(EC.visibility_of_element_located((By.XPATH, '//*[@id="react-root"]/section/main/div/div[1]/div/div[5]')))
         except TimeoutError:
-            raise TimeoutError('Timed out loading login page')
+            raise TimeoutError('Timed out loading image page')
 
-        check_page_load()
+        # check_page_load()
         # if ig_driver.current_url != 'https://www.instagram.com/explore':
         #     raise ConnectionError('Did not connect to explore page, quitting early')
 
@@ -186,29 +188,24 @@ def get_image_urls(requested=100) -> list:
                     break
             else:
                 continue
-
-    # ! Testing Data
-    rv.insert(0, 'https://www.instagram.com/p/CDg9poShSNF')
-    rv.insert(0, 'https://www.instagram.com/p/CDZSOsbhpR0')
-    rv.insert(0, 'https://www.instagram.com/p/CDtoaIgBNrI')
+    logger.info(f'Retrieved {len(rv)} post urls)')
     return rv
 
 
-def get_user_urls(partial_user_urls: list) -> list:
+def get_user_urls(ig_driver, partial_user_urls: list) -> list:
     rv = []
     for element in partial_user_urls:
         rv.append(f'https://www.instagram.com/{element}')
-    # ! Testing Data
-    rv.insert(0, 'https://www.instagram.com/3d_printing_virals')
+    logger.info(f'Retrieved {len(rv)} user urls)')
     return rv
 
 
-def get_image_data(urls) -> list:
+def get_image_data(ig_driver, urls) -> list:
     posts = []
     post = {}
 
+    wait = WebDriverWait(ig_driver, 5)
     for index, url in enumerate(urls):
-        logging.debug(f'Getting data for {index}: {url}')
         # response = requests.get(url)
         # if response.ok:
         #     soup = BeautifulSoup(response.text, 'html.parser')
@@ -216,13 +213,27 @@ def get_image_data(urls) -> list:
         #     raise ConnectionError(f'Unable to connect to Instagram post')
 
         # ! Reimplementing Selenium for checking posts data
-        ig_driver.get(url)
-        check_page_load()
+        try:
+            logger.info(f'Getting Image #{index+1} at {url}')
+            ig_driver.get(url)
+            wait.until(EC.visibility_of_element_located((By.CLASS_NAME, 'sDN5V')))
+        except TimeoutException:
+            if ig_driver.find_element_by_class_name('dialog-404'):
+                print('Saw 404 page, waiting 30 seconds')
+                ig_driver.implicitly_wait(30)
+            try:
+                logger.warning(f'Retrying Image #{index+1} at {url} after 30 second pause')
+                ig_driver.get(url)
+                wait.until(EC.visibility_of_element_located((By.CLASS_NAME, 'sDN5V')))
+            except TimeoutError:
+                raise TimeoutError('Timed out retrying image page')
+        except TimeoutError:
+            raise TimeoutError('Timed out loading image page')
+
         soup = BeautifulSoup(ig_driver.page_source, 'html.parser')
 
         json_data = get_post_script(soup)
 
-        # TODO: This is broken, should be an array of dicts being returned
         post['link'] = str(json_data['graphql']['shortcode_media']['shortcode'])
         post['username'] = str(json_data['graphql']['shortcode_media']['owner']['username'])
         post['date_seen'] = datetime.now(timezone.utc)
@@ -247,7 +258,6 @@ def get_image_data(urls) -> list:
 
 def get_post_script(soup):
     """
-    # TODO: Implement get_user_script()
 
     :param: index = 19 is due to 19 being the most common location for the script we're looking for
     :return:
@@ -289,11 +299,12 @@ def get_tags(soup: BeautifulSoup) -> list:
     return rv
 
 
-def get_user_data(urls) -> list:
+def get_user_data(ig_driver, urls) -> list:
     users = []
     user = {}
 
-    for url in urls:
+    wait = WebDriverWait(ig_driver, 5)
+    for index, url in enumerate(urls):
         # response = requests.get(f'https://www.instagram.com/{url}')
         # if response.ok:
         #     soup = BeautifulSoup(response.text, 'html.parser')
@@ -301,23 +312,28 @@ def get_user_data(urls) -> list:
         #     raise ConnectionError(f'Unable to connect to Instagram profile page')
 
         # ! Reimplementing Selenium for checking posts data
-        ig_driver.get(url)
-        check_page_load()
-        soup = BeautifulSoup(ig_driver.page_source, 'html.parser')
+        try:
+            logger.info(f'Getting User #{index+1} at {url}')
+            ig_driver.get(url)
+            wait.until(EC.visibility_of_element_located((By.CLASS_NAME, 'sDN5V')))
+        except TimeoutException:
+            if ig_driver.find_element_by_class_name('dialog-404'):
+                ig_driver.implicitly_wait(30)
+            try:
+                logger.warning(f'Retrying User #{index+1} at {url} after 30 second pause')
+                ig_driver.get(url)
+                wait.until(EC.visibility_of_element_located((By.CLASS_NAME, 'sDN5V')))
+            except TimeoutError:
+                raise TimeoutError('Timed out retrying user page')
+        except TimeoutError:
+            raise TimeoutError('Timed out loading user page')
 
-        print(url)
+        soup = BeautifulSoup(ig_driver.page_source, 'html.parser')
         json_data = get_user_script(soup)
         try:
             profile_data = json_data['entry_data']['ProfilePage'][0]['graphql']['user']
         except KeyError:
             raise KeyError
-
-        # try:
-        #     # TODO: Set profile_data to this permanently if checking against additionalData only returns this path
-        #     print('hit second try in user_data')
-        #     profile_data = json_data['graphql']['user']
-        # except KeyError:
-        #     raise JSONDecodeError
 
         user['id'] = int(profile_data['id'])
         user['username'] = str(profile_data['username'])
@@ -373,34 +389,47 @@ def upload_data(post_data, user_data):
     with psycopg2.connect(**connection_arguments) as conn:
         try:
             cur = conn.cursor()
-            for user in user_data:
-                upload_user_data(cur, **user)
-            for post in post_data:
-                upload_post_data(cur, **post)
+            logger.info('Uploading User Data')
+            upload_user_data(cur, user_data)
+            logger.info('Uploading Post Data')
+            upload_post_data(cur, post_data)
         except (Exception, psycopg2.DatabaseError) as error:
             print(error)
 
 
-def upload_post_data(cur, link, username, date_seen, date_posted, likes, comments, liked, is_video, is_seen, tag_count, from_explore, from_liked, is_ad, views, tags):
-    print(f'Uploading Post for {link}')
-    tags = build_tags(tags)
-    # TODO: Implement date_seen and date_posted
-    cur.execute(f"""INSERT INTO posts (link, username, likes, comments, liked, is_video, is_seen, tag_count, from_explore, from_liked, is_ad, views, tags) VALUES ('{link}', '{username}', {likes}, {comments}, {liked}, {is_video}, {is_seen}, {tag_count}, {from_explore}, {from_liked}, {is_ad}, {views}, '{tags}');""")
+def upload_post_data(cur, posts):
+    for post in posts:
+        (link, username, date_seen, date_posted, is_video, likes, comments, liked, is_seen, tags, from_explore,
+         from_liked, is_ad, tag_count, views) = post.values()
+        tags = build_tags(tags)
+        logger.info(f'Uploading Post for {link}')
+        # TODO: Implement date_seen and date_posted
+        cur.execute(f"""INSERT INTO posts (link, username, likes, comments, liked, is_video, is_seen, tag_count, from_explore, from_liked, is_ad, views, tags) VALUES ('{link}', '{username}', {likes}, {comments}, {liked}, {is_video}, {is_seen}, {tag_count}, {from_explore}, {from_liked}, {is_ad}, {views}, '{tags}');""")
 
 
-def upload_user_data(cur, username, followers, following, following_me, requested, requested_me, edge_followers, verified, is_business_account, id, full_name, connected_fb_page, is_joined_recently, business_category_name, category_enum, blocked_by_viewer, has_blocked_viewer, restricted_by_viewer, is_private):
-    print(f'Uploading User for {username}')
-    cur.execute(f"""INSERT INTO users VALUES ('{username}', {followers}, {following}, {following_me}, {requested}, {requested_me}, {edge_followers}, {verified}, {is_business_account}, {id}, '{full_name}', {connected_fb_page}, {is_joined_recently}, '{business_category_name}', '{category_enum}', {blocked_by_viewer}, {has_blocked_viewer}, {restricted_by_viewer}, {is_private});""")
+def upload_user_data(cur, users):
+    for user in users:
+        cur.execute(f"""SELECT username FROM users WHERE username='{user.get('username')}';""")
+        if cur.fetchone() is None:
+            (id, username, full_name, followers, following, following_me, requested, requested_me, edge_followers,
+             verified, is_business_account, connected_fb_page, is_joined_recently, business_category_name, category_enum,
+             blocked_by_viewer, has_blocked_viewer, restricted_by_viewer, is_private) = user.values()
+            full_name = full_name.replace('\'', '')
+            logger.info(f'Uploading User for {username}')
+            cur.execute(f"""INSERT INTO users VALUES ('{username}', {followers}, {following}, {following_me}, {requested}, {requested_me}, {edge_followers}, {verified}, {is_business_account}, {id}, '{full_name}', {connected_fb_page}, {is_joined_recently}, '{business_category_name}', '{category_enum}', {blocked_by_viewer}, {has_blocked_viewer}, {restricted_by_viewer}, {is_private});""")
+        else:
+            logger.info(f'{user.get("username")} already exists')
 
 
 def build_tags(tags) -> str:
-    rv = json.dumps(tags)
+    striped_tags = []
+    for tag in tags:
+        striped_tags.append(tag[:30])
+    rv = json.dumps(striped_tags)
     rv = (rv.replace('[', '{')).replace(']', '}')
     return rv
 
 
 if __name__ == '__main__':
-    with webdriver.Chrome(PATH) as ig_driver:
-        (post_data, user_data) = run_scrape(1)
-
+    (post_data, user_data) = run_scrape(10)
     upload_data(post_data, user_data)

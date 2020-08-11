@@ -30,7 +30,6 @@ def get_tags(soup, container=[]):
 
 def check_is_seen():
     """
-    # TODO: check_is_seen():
     :return:
     """
     return False
