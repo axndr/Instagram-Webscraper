@@ -1,2 +1,7 @@
-/__pycache__/
-/.idea/
+.idea/
+/data/
+*/__pycache__
+*/*/__pycache__
+/logs
+.env
+.venv
