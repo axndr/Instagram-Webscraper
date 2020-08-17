@@ -424,12 +424,34 @@ def upload_user_data(cur, users):
 def build_tags(tags) -> str:
     striped_tags = []
     for tag in tags:
-        striped_tags.append(tag[:30])
+        if len(tag) > 30:
+            striped_tags.append(tag[:30])
+        else:
+            striped_tags.append(tag)
     rv = json.dumps(striped_tags)
     rv = (rv.replace('[', '{')).replace(']', '}')
     return rv
 
 
 if __name__ == '__main__':
-    (post_data, user_data) = run_scrape(10)
+    (post_data, user_data) = run_scrape(100)
+
+    # TODO: Find source of 'Values too long for VARCHAR(30)' error
+    for post in post_data:
+        if len(post['link']) > 30:
+            logger.exception(f'{post.get("link")} was over VARCHAR limit')
+        if len(post['username']) > 30:
+            logger.exception(f'{post.get("username")} was over VARCHAR limit')
+
+    for user in user_data:
+        if len(user['username']) > 30:
+            logger.exception(f'{user.get("username")} was over VARCHAR limit')
+        if len(user['full_name']) > 50:
+            logger.exception(f'{user.get("full_name")} was over VARCHAR limit')
+        if len(user['business_category_name']) > 50:
+            logger.exception(f'{user.get("business_category_name")} was over VARCHAR limit')
+        if len(user['category_enum']) > 50:
+            logger.exception(f'{user.get("category_enum")} was over VARCHAR limit')
+
+    # TODO: Cut out duplicate users before cycling through user pages
     upload_data(post_data, user_data)
