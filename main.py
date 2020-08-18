@@ -97,11 +97,9 @@ def run_scrape(number_of_posts) -> tuple:
         user_urls = get_user_urls(ig_driver, (post['username'] for post in post_data))
         user_data = get_user_data(ig_driver, user_urls)
 
-        # TODO: Implement hashtag scrape in run_scrape()
-        # tags = set((tag for tag in post['tags']) for post in post_data)
-        # tag_data = get_tag_data(tags)
+        tag_data = get_tag_data(post_data)
 
-        return post_data, user_data
+        return post_data, user_data, tag_data
 
 
 def login(ig_driver):
@@ -144,11 +142,6 @@ def db_login():
         amount = 2500
     except psycopg2.DatabaseError:
         raise psycopg2.DatabaseError(f'Could not connect to {os.getenv("PG_DATABASE_NAME")}')
-
-    cursor.execute('ALTER TABLE posts ADD COLUMN test VARCHAR(20);')
-    yield
-
-    cursor.execute('ALTER TABLE posts DROP COLUMN test')
 
     # closing database connection.
     if connection:
@@ -236,8 +229,8 @@ def get_image_data(ig_driver, urls) -> list:
 
         post['link'] = str(json_data['graphql']['shortcode_media']['shortcode'])
         post['username'] = str(json_data['graphql']['shortcode_media']['owner']['username'])
-        post['date_seen'] = datetime.now(timezone.utc)
-        post['date_posted'] = datetime.fromtimestamp(json_data['graphql']['shortcode_media']['taken_at_timestamp'], tz=timezone.utc)
+        post['date_seen'] = datetime.now().date()
+        post['date_posted'] = datetime.fromtimestamp(json_data['graphql']['shortcode_media']['taken_at_timestamp']).date()
         post['is_video'] = bool(json_data['graphql']['shortcode_media']['is_video'])
         post['likes'] = int(json_data['graphql']['shortcode_media']['edge_media_preview_like']['count'])
         post['comments'] = int(json_data['graphql']['shortcode_media']['edge_media_to_parent_comment']['count'])
@@ -385,12 +378,29 @@ def get_user_script(soup):
         raise JSONDecodeError
 
 
-def upload_data(post_data, user_data):
+def get_tag_data(post_data):
+    list_of_tags = set()
+    for post in post_data:
+        for tag in post['tags']:
+            list_of_tags.add(tag)
+    return list_of_tags
+
+
+def upload_data(post_data, user_data, tag_data):
+    """
+    # TODO: Change to basic usage of passing 'string' and 'data' to cur.execute()
+    # TODO: If seen, update existing value
+    :param post_data:
+    :param user_data:
+    :return:
+    """
     with psycopg2.connect(**connection_arguments) as conn:
         try:
             cur = conn.cursor()
             logger.info('Uploading User Data')
             upload_user_data(cur, user_data)
+            logger.info('Uploading Tag Data')
+            upload_tag_data(cur, tag_data)
             logger.info('Uploading Post Data')
             upload_post_data(cur, post_data)
         except (Exception, psycopg2.DatabaseError) as error:
@@ -403,8 +413,7 @@ def upload_post_data(cur, posts):
          from_liked, is_ad, tag_count, views) = post.values()
         tags = build_tags(tags)
         logger.info(f'Uploading Post for {link}')
-        # TODO: Implement date_seen and date_posted
-        cur.execute(f"""INSERT INTO posts (link, username, likes, comments, liked, is_video, is_seen, tag_count, from_explore, from_liked, is_ad, views, tags) VALUES ('{link}', '{username}', {likes}, {comments}, {liked}, {is_video}, {is_seen}, {tag_count}, {from_explore}, {from_liked}, {is_ad}, {views}, '{tags}');""")
+        cur.execute(f"""INSERT INTO posts (link, username, date_seen, date_posted, likes, comments, liked, is_video, is_seen, tag_count, from_explore, from_liked, is_ad, views, tags) VALUES ('{link}', '{username}', '{date_seen}', '{date_posted}', {likes}, {comments}, {liked}, {is_video}, {is_seen}, {tag_count}, {from_explore}, {from_liked}, {is_ad}, {views}, '{tags}');""")
 
 
 def upload_user_data(cur, users):
@@ -421,6 +430,21 @@ def upload_user_data(cur, users):
             logger.info(f'{user.get("username")} already exists')
 
 
+def upload_tag_data(cur, tags):
+    striped_tags = []
+    for tag in tags:
+        striped_tags.append(tag[:30])
+
+    for tag in striped_tags:
+        cur.execute(f"""SELECT tag FROM post_tags WHERE tag='{tag}';""")
+        if cur.fetchone() is None:
+            logger.info(f'Uploading Tag for {tag}')
+            cur.execute(f"""INSERT INTO post_tags (tag, date_seen) VALUES ('{tag}', '{datetime.now().date()}');""")
+        else:
+            logger.info(f'{tag} already exists, updating date seen.')
+            cur.execute(f"""UPDATE post_tags SET date_seen = '{datetime.now().date()}' WHERE tag='{tag}';""")
+
+
 def build_tags(tags) -> str:
     striped_tags = []
     for tag in tags:
@@ -433,25 +457,36 @@ def build_tags(tags) -> str:
     return rv
 
 
-if __name__ == '__main__':
-    (post_data, user_data) = run_scrape(100)
-
+def check_character_limits(post_data, user_data, tag_data):
+    """
     # TODO: Find source of 'Values too long for VARCHAR(30)' error
+
+    :return:
+    """
     for post in post_data:
         if len(post['link']) > 30:
-            logger.exception(f'{post.get("link")} was over VARCHAR limit')
+            logger.warning(f'{post.get("link")} was over VARCHAR limit')
         if len(post['username']) > 30:
-            logger.exception(f'{post.get("username")} was over VARCHAR limit')
+            logger.warning(f'{post.get("username")} was over VARCHAR limit')
 
     for user in user_data:
         if len(user['username']) > 30:
-            logger.exception(f'{user.get("username")} was over VARCHAR limit')
+            logger.warning(f'{user.get("username")} was over VARCHAR limit')
         if len(user['full_name']) > 50:
-            logger.exception(f'{user.get("full_name")} was over VARCHAR limit')
+            logger.warning(f'{user.get("full_name")} was over VARCHAR limit')
         if len(user['business_category_name']) > 50:
-            logger.exception(f'{user.get("business_category_name")} was over VARCHAR limit')
+            logger.warning(f'{user.get("business_category_name")} was over VARCHAR limit')
         if len(user['category_enum']) > 50:
-            logger.exception(f'{user.get("category_enum")} was over VARCHAR limit')
+            logger.warning(f'{user.get("category_enum")} was over VARCHAR limit')
 
+    for tag in tag_data:
+        if len(tag) > 30:
+            logger.warning(f'{tag} was over VARCHAR limit')
+
+
+if __name__ == '__main__':
+    (post_data, user_data, tag_data) = run_scrape(100)
+    check_character_limits(post_data, user_data, tag_data)
+    # TODO: Fix logging error for unicode(?) characters
     # TODO: Cut out duplicate users before cycling through user pages
-    upload_data(post_data, user_data)
+    upload_data(post_data, user_data, tag_data)
